@@ -15,7 +15,7 @@ class Place(models.Model):
     address=models.CharField(_('address'), max_length=64)
 
 class Checkin(models.Model):
-    profile=models.ForeignKey(Profile,unique=True,verbose_name=_('user profile'))
-    place=models.ForeignKey(Place,unique=True,verbose_name=_('place'))
+    profile=models.ForeignKey(Profile,verbose_name=_('user profile'))
+    place=models.ForeignKey(Place,verbose_name=_('place'))
     time=models.DateTimeField(_('alterado em'), auto_now=True)
 
