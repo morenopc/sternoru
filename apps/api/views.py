@@ -13,6 +13,7 @@ from django.core import serializers
 import math
 import datetime
 from django.db.models import Count
+from django.http import Http404
 #from api.forms import PesqForm
 
 #
@@ -21,6 +22,7 @@ from django.db.models import Count
 # Query to
 # Get a list of places (DB model Place) around user's current location if lat/lng specified,
 # otherwise all places.
+# 
 #
 def places(request):
     json=[]
@@ -40,7 +42,7 @@ def places(request):
         # Query
         # SELECT id, ( 3959 * acos( cos( radians(37) ) * cos( radians( lat ) ) * cos( radians( lng ) - radians(-122) ) + sin( radians(37) ) * sin( radians( lat ) ) ) ) AS distance FROM markers HAVING distance < 25 ORDER BY distance LIMIT 0 , 20;
         #
-        # @@@ The best solution is with GeoDjango        
+        # @@@ The best solution is with GeoDjango and Postgres   
         #
         queryset=Place.objects.all() 
         try:
@@ -50,9 +52,8 @@ def places(request):
             for qs in queryset:
                 distance=dec_distance(lng,lat,qs.lng,qs.lat)
                 distance=round(distance,3)
-                distance*=1000# convert to meters
-                #if distance < 40:
-                data+=[{"id":int(qs.id),"name":qs.name,"lat":str(qs.lat),"lng":str(qs.lng),"address":qs.address,"distance":int(distance)}]
+                if distance < 40:
+                    data+=[{"id":int(qs.id),"name":qs.name,"lat":str(qs.lat),"lng":str(qs.lng),"address":qs.address,"distance":int(distance*1000)}]
             
             data=sorted(data, key=lambda tup: tup['distance'])
             
@@ -61,9 +62,8 @@ def places(request):
                 data+=[{"id":int(qs.id),"name":qs.name,"lat":str(qs.lat),"lng":str(qs.lng),"address":qs.address,"distance":distance}]
         
         data=data[offset:limit]
-        
         json={"response":{"meta":{"limit":int(limit),"offset":int(offset),"sort":"-distance","count":int(queryset.count())},
-            "errors":[{"def":"1.places"}],
+            "errors":[],
             "data":data
             }
         }
@@ -87,8 +87,7 @@ def places_details(request,places_id):
         qs_checkins=Checkin.objects.filter(place=place.id).order_by('-time')
         # time "2 hours ago"
         for qs in qs_checkins[:3]:
-            checkins+=[{"id":int(qs.id),"time":qs.time.strftime('%I:%m:%S%p'),"user":{"id":qs.profile.user.id,"username":qs.profile.user.username}}]
-        
+            checkins+=[{"id":int(qs.id),"time":qs.time.strftime('%I:%M:%S%p'),"user":{"id":qs.profile.user.id,"username":qs.profile.user.username}}]
         try:
             lat=float(request.GET.get('lat'))
             lng=float(request.GET.get('lng'))
@@ -101,7 +100,7 @@ def places_details(request,places_id):
             pass
             
         json={"response":{"meta":{},
-            "errors":[{"def":"2.places default"}],
+            "errors":[],
             "data":[{"id":place.id,"name":place.name,"lat":str(place.lat),"lng":str(place.lng),"address":place.address,"distance":distance,"checkins_count":qs_checkins.count(),
             "checkins":checkins
                     }]
@@ -131,10 +130,10 @@ def checkins_list(request,places_id):
         qs_checkins=Checkin.objects.filter(place=places_id).order_by('-time')[offset:limit]
         # time "2 hours ago"
         for qs in qs_checkins[:3]:
-            checkins+=[{"id":int(qs.id),"time":qs.time.strftime('%I:%m:%S%p'),"user":{"id":qs.profile.user.id,"username":qs.profile.user.username}}]
+            checkins+=[{"id":int(qs.id),"time":qs.time.strftime('%I:%M:%S%p'),"user":{"id":qs.profile.user.id,"username":qs.profile.user.username}}]
      
     json={"response":{"meta":{},
-            "errors":[{"def":"3. Place check-ins (list)"}],
+            "errors":[],
             "data":{
             "checkins":checkins
                     }
@@ -145,6 +144,7 @@ def checkins_list(request,places_id):
 #
 # 4. Place check-in (action)
 # Creates a Check-in in a Place by a currently logged in User.
+# /api/v1/places/1003/checkin
 #
 def checkin(request,places_id):
     
@@ -165,13 +165,13 @@ def checkin(request,places_id):
             new_checkin.save()
             status="success"
         
-            checkin=[{"id":new_checkin.id,"time":new_checkin.time.strftime('%I:%m:%S%p'),"user":{"id":new_checkin.profile.user.id,"username":new_checkin.profile.user.username}}]
+            checkin=[{"id":new_checkin.id,"time":new_checkin.time.strftime('%I:%M:%S%p'),"user":{"id":new_checkin.profile.user.id,"username":new_checkin.profile.user.username}}]
         
         except:
             pass
         
         json={"response":{"meta":{},
-            "errors":[{"def":"4. Place check-in"}],
+            "errors":[],
             "status":status,
             "data":{
                 "checkin":checkin
@@ -200,17 +200,15 @@ def users_list(request):
             pass
         
         qs_profiles=Profile.objects.annotate(ckins=Count('checkin')).order_by('-ckins')[offset:limit]
-        count=1
-        for qs in qs_profiles:
-            data+=[{"id":int(qs.id),"rank":count,"username":qs.user.username,"checkins":qs.ckins}]
-            count+=1
+        for rank, qs in enumerate(qs_profiles):
+            data+=[{"id":int(qs.id),"rank":rank+1,"username":qs.user.username,"checkins":qs.ckins}]
             
         json={"response":{"meta":{
                                 "limit":limit,
                                 "offset":offset,
                                 "sort":"rank",
                                 "count":qs_profiles.count()},
-            "errors":[{"def":"5. Users (list)"}],
+            "errors":[],
             "data":data
             }
         }
@@ -229,16 +227,21 @@ def user(request,user_id):
     
     if request.method == 'GET':
         
+        try: 
+            user_id=int(user_id)
+        except:
+            raise Http404
+        
         qs_profiles=Profile.objects.annotate(ckins=Count('checkin')).order_by('-ckins')
-        #count=1
-        #for qs in qs_profiles:
-        #    data+=[{"id":int(qs.id),"rank":count,"username":qs.user.username,"checkins":qs.ckins}]
-        #    count+=1
+        # not so good
+        for pos, qs in enumerate(qs_profiles):
+            if qs.id == user_id:
+                rank=pos
         
         profile=get_object_or_404(qs_profiles,pk=user_id)
         json={"response":{"meta":{},
-            "errors":[{"def":"6. User profile (single object)"}],
-            "data":[{"id":profile.id,"username":profile.user.username,"screenname":profile.user.get_full_name(),"rank":0,"checkins_count":profile.ckins}]
+            "errors":[],
+            "data":[{"id":profile.id,"username":profile.user.username,"screenname":profile.user.get_full_name(),"rank":rank+1,"checkins_count":profile.ckins}]
             }
         }
         
