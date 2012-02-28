@@ -1,7 +1,9 @@
 #!/usr/bin/python
 # -*- coding: UTF8 -*-
 
-#from django.contrib.auth.decorators import login_required
+import math
+import datetime
+import json
 from django.http import HttpResponse, HttpResponseRedirect
 #from django.core import serializers
 from django.core.urlresolvers import reverse
@@ -10,11 +12,8 @@ from django.template import Context, RequestContext
 from api.models import Profile, Place, Checkin
 from api.haversine import dec_distance
 from django.core import serializers
-import math
-import datetime
 from django.db.models import Count
 from django.http import Http404
-#from api.forms import PesqForm
 
 #
 # 1. places
@@ -25,7 +24,7 @@ from django.http import Http404
 # 
 #
 def places(request):
-    json=[]
+    jn=[]
     limit=10
     offset=0
     distance=None
@@ -62,13 +61,13 @@ def places(request):
                 data+=[{"id":int(qs.id),"name":qs.name,"lat":str(qs.lat),"lng":str(qs.lng),"address":qs.address,"distance":distance}]
         
         data=data[offset:limit]
-        json={"response":{"meta":{"limit":int(limit),"offset":int(offset),"sort":"-distance","count":int(queryset.count())},
+        jn={"response":{"meta":{"limit":int(limit),"offset":int(offset),"sort":"-distance","count":int(queryset.count())},
             "errors":[],
             "data":data
             }
         }
         
-    return HttpResponse(json.values(), mimetype="application/json")
+    return HttpResponse(json.dumps(jn.values(),indent=4,separators=(',',':')), mimetype="application/json")
 
 #
 # 2. places details
@@ -77,7 +76,7 @@ def places(request):
 #
 def places_details(request,places_id):
     
-    json=[]
+    jn=[]
     checkins=[]
     distance=None
     
@@ -99,23 +98,23 @@ def places_details(request,places_id):
         except:
             pass
             
-        json={"response":{"meta":{},
+        jn={"response":{"meta":{},
             "errors":[],
-            "data":[{"id":place.id,"name":place.name,"lat":str(place.lat),"lng":str(place.lng),"address":place.address,"distance":distance,"checkins_count":qs_checkins.count(),
+            "data":[{"id":place.id,"name":place.name,"lat":str(place.lat),"lng":str(place.lng),"address":place.address,"distance":int(distance),"checkins_count":qs_checkins.count(),
             "checkins":checkins
                     }]
                 }
             }
-    return HttpResponse(json.values(), mimetype="application/json")
+    return HttpResponse(json.dumps(jn.values(),indent=4,separators=(',',':')), mimetype="application/json")
     
 #
 # 3. Place check-ins (list)
 # Get a list of Check-ins for a specific Place.
-# /api/v1/places/1003/checkins?limit=10&offset=0
+# /api/v1/places/1/checkins?limit=10&offset=0
 #
 def checkins_list(request,places_id):
     
-    json=[]
+    jn=[]
     checkins=[]
     limit=10
     offset=0
@@ -132,14 +131,14 @@ def checkins_list(request,places_id):
         for qs in qs_checkins[:3]:
             checkins+=[{"id":int(qs.id),"time":qs.time.strftime('%I:%M:%S%p'),"user":{"id":qs.profile.user.id,"username":qs.profile.user.username}}]
      
-    json={"response":{"meta":{},
+    jn={"response":{"meta":{},
             "errors":[],
             "data":{
             "checkins":checkins
                     }
                 }
             }
-    return HttpResponse(json.values(), mimetype="application/json")
+    return HttpResponse(json.dumps(jn.values(),indent=4,separators=(',',':')), mimetype="application/json")
 
 #
 # 4. Place check-in (action)
@@ -148,7 +147,7 @@ def checkins_list(request,places_id):
 #
 def checkin(request,places_id):
     
-    json=[]
+    jn=[]
     status="error"
     checkin=[]
     
@@ -165,12 +164,12 @@ def checkin(request,places_id):
             new_checkin.save()
             status="success"
         
-            checkin=[{"id":new_checkin.id,"time":new_checkin.time.strftime('%I:%M:%S%p'),"user":{"id":new_checkin.profile.user.id,"username":new_checkin.profile.user.username}}]
+            checkin=[{"id":int(new_checkin.id),"time":new_checkin.time.strftime('%I:%M:%S%p'),"user":{"id":new_checkin.profile.user.id,"username":new_checkin.profile.user.username}}]
         
         except:
             pass
         
-        json={"response":{"meta":{},
+        jn={"response":{"meta":{},
             "errors":[],
             "status":status,
             "data":{
@@ -179,7 +178,7 @@ def checkin(request,places_id):
             }
         }
         
-    return HttpResponse(json.values(), mimetype="application/json")
+    return HttpResponse(json.dumps(jn.values(),indent=4,separators=(',',':')), mimetype="application/json")
 
 #
 # 5. Users (list)
@@ -187,7 +186,7 @@ def checkin(request,places_id):
 # /api/v1/users?limit=10&offset=0
 #
 def users_list(request):
-    json=[]
+    jn=[]
     data=[]
     limit=10
     offset=0
@@ -203,7 +202,7 @@ def users_list(request):
         for rank, qs in enumerate(qs_profiles):
             data+=[{"id":int(qs.id),"rank":rank+1,"username":qs.user.username,"checkins":qs.ckins}]
             
-        json={"response":{"meta":{
+        jn={"response":{"meta":{
                                 "limit":limit,
                                 "offset":offset,
                                 "sort":"rank",
@@ -213,7 +212,7 @@ def users_list(request):
             }
         }
         
-    return HttpResponse(json.values(), mimetype="application/json")
+    return HttpResponse(json.dumps(jn.values(),indent=4,separators=(',',':')), mimetype="application/json")
 
 #
 # 6. User profile (single object)
@@ -222,7 +221,7 @@ def users_list(request):
 #
 def user(request,user_id):
     
-    json=[]
+    jn=[]
     data=[]
     
     if request.method == 'GET':
@@ -239,11 +238,11 @@ def user(request,user_id):
                 rank=pos
         
         profile=get_object_or_404(qs_profiles,pk=user_id)
-        json={"response":{"meta":{},
+        jn={"response":{"meta":{},
             "errors":[],
-            "data":[{"id":profile.id,"username":profile.user.username,"screenname":profile.user.get_full_name(),"rank":rank+1,"checkins_count":profile.ckins}]
+            "data":[{"id":profile.id,"username":profile.user.username,"sex":profile.get_sex_display(),"rank":rank+1,"checkins_count":profile.ckins}]
             }
         }
         
-    return HttpResponse(json.values(), mimetype="application/json")
+    return HttpResponse(json.dumps(jn.values(),indent=4,separators=(',',':')), mimetype="application/json")
 
