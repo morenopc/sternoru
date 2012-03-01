@@ -27,7 +27,7 @@ def places(request):
     jn=[]
     limit=10
     offset=0
-    distance=None
+    distance=0
     data=[]
     
     if request.method == 'GET':
@@ -43,7 +43,7 @@ def places(request):
         #
         # @@@ The best solution is with GeoDjango and Postgres   
         #
-        queryset=Place.objects.all() 
+        queryset=Place.objects.all()
         try:
             lat=float(request.GET.get('lat'))
             lng=float(request.GET.get('lng'))
@@ -78,7 +78,7 @@ def places_details(request,places_id):
     
     jn=[]
     checkins=[]
-    distance=None
+    distance=0
     
     if request.method == 'GET':
 
